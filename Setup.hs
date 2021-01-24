@@ -1,5 +1,4 @@
-{-# OPTIONS_GHC
-  -Wall -Wno-warnings-deprecations -fno-warn-orphans -threaded -with-rtsopts=-N #-}
+{-# OPTIONS_GHC -Wall -Wno-warnings-deprecations -fno-warn-orphans -threaded -with-rtsopts=-N #-}
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -12,7 +11,7 @@ import Distribution.Simple.Setup
 import GHC.Environment (getFullArgs)
 import System.Environment (lookupEnv)
 import System.Log.FastLogger
-       (defaultBufSize, LogStr, toLogStr, LogType(LogFileNoRotate),
+       (defaultBufSize, LogStr, toLogStr, LogType'(LogFileNoRotate),
         withTimedFastLogger)
 import System.Log.FastLogger.Date (newTimeCache, simpleTimeFormat)
 import Text.Show.Pretty (ppShow)
@@ -59,14 +58,14 @@ main = do
                         h simpleUserHooks x y z w
                 defaultMainWithHooks
                     simpleUserHooks
-                    { runTests =
-                          \a f p i -> do
-                              flog $ "runTests Args: " <> ppLog a
-                              flog $ "runTests flag: " <> ppLog f
-                              flog $ "runTests PackageDescription: " <> ppLog p
-                              flog $ "runTests LocalBuildInfo: " <> ppLog i
-                              runTests simpleUserHooks a f p i
-                    , readDesc =
+                    { -- runTests =
+                      --     \a f p i -> do
+                      --         flog $ "runTests Args: " <> ppLog a
+                      --         flog $ "runTests flag: " <> ppLog f
+                      --         flog $ "runTests PackageDescription: " <> ppLog p
+                      --         flog $ "runTests LocalBuildInfo: " <> ppLog i
+                      --         runTests simpleUserHooks a f p i
+                      readDesc =
                           do r <- readDesc simpleUserHooks
                              flog $ "readDesc: " <> ppLog r
                              pure r
@@ -103,9 +102,9 @@ main = do
                     , preInst = preHook "preInst" preInst
                     , instHook = hook4 "instHook" instHook
                     , postInst = postHook "postInst" postInst
-                    , preSDist = preHook "preSDist" preSDist
-                    , sDistHook = hook4 "sDistHook" sDistHook
-                    , postSDist = postHook "postSDist" postSDist
+                    -- preSDist = preHook "preSDist" preSDist
+                    -- sDistHook = hook4 "sDistHook" sDistHook
+                    -- postSDist = postHook "postSDist" postSDist
                     , preReg = preHook "preReg" preReg
                     , regHook = hook4 "regHook" regHook
                     , postReg = postHook "postReg" postReg
