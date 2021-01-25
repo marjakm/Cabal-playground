@@ -1,9 +1,6 @@
 {-# OPTIONS_GHC -Wall -Wno-warnings-deprecations -fno-warn-orphans -threaded -with-rtsopts=-N #-}
-{-# LANGUAGE ApplicativeDo #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE ApplicativeDo, OverloadedStrings, StandaloneDeriving  #-}
 
-import Data.Monoid ((<>))
 import Distribution.Simple
        (defaultMain, UserHooks(..), defaultMainWithHooks, simpleUserHooks)
 import Distribution.Simple.Setup
@@ -15,10 +12,11 @@ import System.Log.FastLogger
         withTimedFastLogger)
 import System.Log.FastLogger.Date (newTimeCache, simpleTimeFormat)
 import Text.Show.Pretty (ppShow)
+import Data.List (intercalate)
 
 deriving instance Show TestFlags
-
 deriving instance Show BenchmarkFlags
+
 
 main :: IO ()
 main = do
@@ -28,11 +26,15 @@ main = do
         Just logPath -> do
             tgetter <- newTimeCache simpleTimeFormat
             withTimedFastLogger tgetter (LogFileNoRotate logPath defaultBufSize) $ \tlog -> do
-                let flog s =
-                        tlog $ \ft ->
-                            "[" <> toLogStr ft <> "] " <> toLogStr s <> "\n"
+                let flog :: LogStr -> IO ()
+                    flog s = tlog $ \ft -> "[" <> toLogStr ft <> "] " <> toLogStr s <> "\n"
+                let progs = hookedPrograms simpleUserHooks
+                let pps = hookedPreProcessors simpleUserHooks
                 args <- getFullArgs
-                flog $ "Process args: " <> ppLog args
+                mapM_ flog $ [ "Process args: "   <> ppLog args
+                             , "hookedPrograms: " <> ppLog progs
+                             , "hookedPreProcessors number: " <> (toLogStr . ppShow $ length pps)
+                             ]
                 let preHook n h x y = do
                         flog $ n <> " Args: " <> ppLog x
                         flog $ n <> " Flags: " <> ppLog y
@@ -57,41 +59,34 @@ main = do
                         flog $ n <> " LocalBuildInfo: " <> ppLog w
                         h simpleUserHooks x y z w
                 defaultMainWithHooks
-                    simpleUserHooks
-                    { -- runTests =
-                      --     \a f p i -> do
-                      --         flog $ "runTests Args: " <> ppLog a
-                      --         flog $ "runTests flag: " <> ppLog f
-                      --         flog $ "runTests PackageDescription: " <> ppLog p
-                      --         flog $ "runTests LocalBuildInfo: " <> ppLog i
-                      --         runTests simpleUserHooks a f p i
-                      readDesc =
-                          do r <- readDesc simpleUserHooks
-                             flog $ "readDesc: " <> ppLog r
-                             pure r
+                    UserHooks
+                    { hookedPreProcessors = pps
+                    , hookedPrograms = progs
+                    , readDesc = do
+                            r <- readDesc simpleUserHooks
+                            flog $ "readDesc: " <> ppLog r
+                            pure r
                     , preConf = preHook "preConf" preConf
-                    , confHook =
-                          \(g, h) c -> do
-                              flog $
-                                  "confHook GenericPackageDescription: " <>
-                                  ppLog g
-                              flog $ "confHook HookedBuildInfo: " <> ppLog h
-                              flog $ "confHook ConfigFlags: " <> ppLog c
-                              i <- confHook simpleUserHooks (g, h) c
-                              flog $ "confHook LocalBuildInfo: " <> ppLog i
-                              pure i
+                    , confHook = \(g, h) c -> do
+                            flog $
+                                "confHook GenericPackageDescription: " <>
+                                ppLog g
+                            flog $ "confHook HookedBuildInfo: " <> ppLog h
+                            flog $ "confHook ConfigFlags: " <> ppLog c
+                            i <- confHook simpleUserHooks (g, h) c
+                            flog $ "confHook LocalBuildInfo: " <> ppLog i
+                            pure i
                     , postConf = postHook "postConf" postConf
                     , preBuild = preHook "preBuild" preBuild
                     , buildHook = hook4 "buildHook" buildHook
                     , postBuild = postHook "postBuild" postBuild
                     , preRepl = preHook "preRepl" preRepl
-                    , replHook =
-                          \p i h f a -> do
-                              flog $ "replHook PackageDescription: " <> ppLog p
-                              flog $ "replHook LocalBuildInfo: " <> ppLog i
-                              flog $ "replHook ReplFlags: " <> ppLog f
-                              flog $ "replHook args: " <> ppLog a
-                              replHook simpleUserHooks p i h f a
+                    , replHook = \p i h f a -> do
+                            flog $ "replHook PackageDescription: " <> ppLog p
+                            flog $ "replHook LocalBuildInfo: " <> ppLog i
+                            flog $ "replHook ReplFlags: " <> ppLog f
+                            flog $ "replHook args: " <> ppLog a
+                            replHook simpleUserHooks p i h f a
                     , postRepl = postHook "postRepl" postRepl
                     , preClean = preHook "preClean" preClean
                     , cleanHook = hook4 "cleanHook" cleanHook
@@ -102,9 +97,9 @@ main = do
                     , preInst = preHook "preInst" preInst
                     , instHook = hook4 "instHook" instHook
                     , postInst = postHook "postInst" postInst
-                    -- preSDist = preHook "preSDist" preSDist
-                    -- sDistHook = hook4 "sDistHook" sDistHook
-                    -- postSDist = postHook "postSDist" postSDist
+                    , preDoctest = preHook "preDoctest" preDoctest
+                    , doctestHook = hook4 "doctestHook" doctestHook
+                    , postDoctest = postHook "postDoctest" postDoctest
                     , preReg = preHook "preReg" preReg
                     , regHook = hook4 "regHook" regHook
                     , postReg = postHook "postReg" postReg
@@ -125,7 +120,7 @@ main = do
                     , postBench = postHook "postBench" postBench
                     }
   where
-    ppLog
-        :: Show a
-        => a -> LogStr
-    ppLog = toLogStr . ppShow
+    ppLog :: Show a => a -> LogStr
+    ppLog = toLogStr . ("\n    " ++) . to4space . ppShow
+        where to4space = intercalate "\n    " . fmap (alterSp . span (==' ')) . lines
+              alterSp (s,r) = replicate ((*4) . ceiling . (/4) . fromIntegral $ length s) ' ' ++ r
